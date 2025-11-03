@@ -20,6 +20,7 @@ class Creature:
     def __init__(self, card):
         self.card = card
         self.current_attack = card.attack # 現状は固定だが、効果で変わる可能性を考慮
+        self.current_power = card.power
         self.is_tapped = False
         self.can_attack_this_turn = False # 出たターンはアタック不可
 
@@ -135,6 +136,20 @@ class Game:
             return "Player 1 Win (Life 0)"
         # 実際にはドロー時の山札切れチェックも必要
         return None
+    
+def battle(attacker, enemy, stk_player, def_player):
+        if enemy.current_power < attacker.current_power:
+            if enemy in def_player.field:
+                def_player.field.remove(enemy)
+        elif attacker.current_power < enemy.current_power:
+            if attacker in stk_player.field:
+                stk_player.field.remove(attacker)
+        else:
+            if enemy in def_player.field:
+                def_player.field.remove(enemy)
+            if attacker in stk_player.field:
+                stk_player.field.remove(attacker)
+        return True
 
 import pygame
 import sys
@@ -199,6 +214,7 @@ def run_game():
     # 選択中のカード/クリーチャーを管理する変数
     selected_card = None 
     attack_card = None
+    enemy_card = None
     
     while running:
         current_player = game.current_turn_player
@@ -240,20 +256,56 @@ def run_game():
                 # --- 攻撃の実装 ---
                 if current_player == game.player1:
                     for i, card in enumerate(current_player.field):
-                        if pygame.Rect(200 + i * 110, SCREEN_HEIGHT - 350, 300 + i * 110, SCREEN_HEIGHT - 390).collidepoint(pos):
-                            attack_card = card
+                        rect = pygame.Rect(200 + i * 110, SCREEN_HEIGHT - 350, 100, 140)
+                        if rect.collidepoint(pos):
+                            if attack_card is None:
+                                attack_card = current_player.field[i]
+                                print(f"攻撃側選択: {attack_card.card.name}")
+                                # 攻撃側をもう一度クリック → 解除
+                            elif attack_card == current_player.field[i]:
+                                print(f"攻撃側解除: {attack_card.card.name}")
+                                attack_card = None
+                    for i, card in enumerate(opponent_player.field):  # 相手のカードを選択
+                        rect = pygame.Rect(200 + i * 110, 220, 100, 140)
+                        if rect.collidepoint(pos):
+                            if attack_card is not None:
+                                enemy_card = opponent_player.field[i]
+                                if enemy_card.is_tapped is True: 
+                                    print(f"防御側選択: {enemy_card.card.name}")
+                                else:
+                                    enemy_card = None
                 else:
                     for i, card in enumerate(current_player.field):
-                        if pygame.Rect(200 + i * 110, 220, 300 + i * 110, 360).collidepoint(pos):
-                            attack_card = card
+                        rect = pygame.Rect(200 + i * 110, 220, 100, 140)
+                        if rect.collidepoint(pos):
+                            if attack_card is None:
+                                attack_card = current_player.field[i]
+                                print(f"攻撃側選択: {attack_card.card.name}")
+                            elif attack_card == current_player.field[i]:
+                                print(f"攻撃側解除: {attack_card.card.name}")
+                                attack_card = None
+                    for i, card in enumerate(opponent_player.field):  # 相手のカードを選択
+                        rect = pygame.Rect(200 + i * 110, SCREEN_HEIGHT - 350, 100, 140)
+                        if rect.collidepoint(pos):
+                            if attack_card is not None:
+                                enemy_card = opponent_player.field[i]
+                                if enemy_card.is_tapped is True: 
+                                    print(f"防御側選択: {enemy_card.card.name}")
+                                else:
+                                    enemy_card = None
                 attack_card_rect = pygame.Rect(30, SCREEN_HEIGHT // 2 - 75, 120, 50)
                 if attack_card_rect.collidepoint(pos):
-                    if(attack_card != None):
-                        if attack_card.is_tapped == False and attack_card.can_attack_this_turn == True:
+                        if attack_card is None:
+                            continue
+                        if not attack_card.is_tapped and attack_card.can_attack_this_turn:
                             game.game_state = 'ATTACK_PHASE'
-                            opponent_player.life -= attack_card.current_attack
                             attack_card.is_tapped = True
-                            attack_card = None
+                            if enemy_card is not None:
+                                battle(attack_card, enemy_card, current_player, opponent_player)
+                            else:
+                                opponent_player.life -= attack_card.current_attack
+                        attack_card = None
+                        enemy_card = None
 
                 
         # --- 描画処理 ---
