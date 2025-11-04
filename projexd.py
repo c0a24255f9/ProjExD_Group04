@@ -2,16 +2,19 @@ import random
 import os
 import sys
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
 # --- 1. Card Class ---
 class Card:
     """カードの基本情報"""
-    def __init__(self, id, name, attack, cost, img):
+    def __init__(self, id, name, attack, cost, img,type):
         self.id = id
         self.name = name
         self.attack = attack        # アタック値
         self.cost = cost     # マナコスト 
         self.power = 1000 * cost # パワー
         self.img = img # 画像名
+        self.type = type # カードタイプ
 
               
         # 実際にはテキストや効果も持つ
@@ -53,17 +56,36 @@ class Player:
         self.deck = card_list * 4 
         random.shuffle(self.deck)
 
+    def select(self,opponent_player):
+        selected_card = None
+        while(selected_card == None):
+            for event in pygame.event.get():
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    pos = event.pos
+                    if self.is_player1:
+                        for i, card in enumerate(opponent_player.field):
+                            rect = pygame.Rect(200 + i * 110, 220, 100, 140)
+                            if rect.collidepoint(pos):
+                                selected_card = card
+                    else:
+                        for i, card in enumerate(opponent_player.field):
+                            rect = pygame.Rect(200 + i * 110, SCREEN_HEIGHT - 350, 100, 140)
+                            if rect.collidepoint(pos):
+                                selected_card = card
+        return selected_card
+
+
 # --- 4. Game Class ---
 class Game:
     """ゲーム全体の進行と状態を管理"""
     def __init__(self):
         # カード定義の例 (実際のゲームではより複雑)
         CARD_PROTOTYPES = [
-            Card(1, "戦士", 3, 2,""),  # id,name,attack,cost,img
-            Card(2, "魔術師", 1, 1,""),
-            Card(3, "騎士", 5, 4,""),
-            Card(4, "弓兵",2, 2,""),
-            Card(5, "ゴーレム", 4, 3,""),
+            Card(1, "こうかーん", 7, 6,"","C"),  # id,name,attack,cost,img,type
+            Card(2, "ボーグとん", 1, 2,"","C"),
+            Card(3, "ハルカとん", 1, 3,"","C"),
+            Card(4, "闇鎧亜",2, 4,"","C"),
+            Card(5,"鳥鍋祭り",0,5,"","M"),
         ]
         
         self.player1 = Player(is_player1=True)
@@ -215,8 +237,6 @@ import sys
 # --- Pygameの初期設定 ---
 pygame.init()
 pygame.mixer.init()
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Kokaton Master's")
 
@@ -246,7 +266,7 @@ def draw_card_on_screen(screen, card_obj, x, y, is_creature=False, is_tapped=Fal
     card_rect = pygame.Rect(x, y, 100, 140) 
     
     # 基本の描画
-    color = BLUE if not is_creature else (100, 200, 100)
+    color = BLUE if not is_creature else (100, 200, 200)
     if is_tapped:
         color = (150, 150, 150) # タップしている場合は灰色に
     pygame.draw.rect(screen, color, card_rect, border_radius=5)
@@ -266,24 +286,32 @@ def draw_card_on_screen(screen, card_obj, x, y, is_creature=False, is_tapped=Fal
 
 def draw_player_status(screen, player, x, y,current):
     """ライフとマナと先攻後攻の表示"""
+    if player.is_player1:
+        player_text = FONT.render(f"name:{"player1"}", True, WHITE)
+    else:
+        player_text = FONT.render(f"name:{"player2"}", True, WHITE)
+    deck_text = FONT.render(f"Deck: {len(player.deck)}", True, WHITE)
     life_text = FONT.render(f"LIFE: {player.life}", True, WHITE)
     mana_text = FONT.render(f"MANA: {player.mana}/{player.max_mana}", True, WHITE)
     if player == current:
         go_text = FONT.render(player.go, True, RED)
     else:
         go_text = FONT.render(player.go, True, WHITE)
-    screen.blit(life_text, (x, y))
-    screen.blit(mana_text, (x, y + 30))
-    screen.blit(go_text, (x, y + 60))
+    screen.blit(player_text, (x, y - 30))
+    screen.blit(deck_text, (x, y))
+    screen.blit(life_text, (x, y + 30))
+    screen.blit(mana_text, (x, y + 60))
+    screen.blit(go_text, (x, y + 90))
 # --- メインゲームループ ---
 def run_game():
     game = Game()
     running = True
     
     # 選択中のカード/クリーチャーを管理する変数
-    selected_card = None 
+    selected_card = None
     attack_card = None
     enemy_card = None
+    target_card = None
 
     #BGMの再生
     try:
@@ -334,10 +362,30 @@ def run_game():
                     if use_card_rect.collidepoint(pos):
                         if(selected_card != None):
                             if(selected_card.cost <= current_player.mana):
-                                current_player.mana -= selected_card.cost
-                                current_player.field.append(Creature(selected_card))
-                                current_player.hand.remove(selected_card)
-                                selected_card = None
+                                if(selected_card.type == "C"):
+                                    current_player.mana -= selected_card.cost
+                                    current_player.field.append(Creature(selected_card))
+                                    current_player.hand.remove(selected_card)
+                                    if(selected_card.id == 4): #  id4番目は相手のクリーチャーを1体選び破壊
+                                        target_card = current_player.select(opponent_player)
+                                        opponent_player.field.remove(target_card)
+                                        opponent_player.graveyard.append(target_card)
+                                        target_card = None
+                                    if(selected_card.id == 3):
+                                        current_player.draw_card()
+                                    selected_card = None
+                                elif(selected_card.type == "M"): # カードが呪文の場合
+                                    if(selected_card.id == 5): # idが6の処理(今回のカードの処理)
+                                        current_player.mana -= selected_card.cost
+                                        if(opponent_player.field != []):
+                                            target_card = current_player.select(opponent_player)
+                                            opponent_player.field.remove(target_card)
+                                            opponent_player.graveyard.append(target_card)
+                                        current_player.draw_card()
+                                        current_player.hand.remove(selected_card)
+                                        current_player.graveyard.append(selected_card)
+                                        selected_card = None
+                                        target_card = None
                     # --- カードを選ぶ判定 ---
                     if current_player == game.player1:
                         for i, card in enumerate(current_player.hand):
