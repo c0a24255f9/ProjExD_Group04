@@ -137,19 +137,75 @@ class Game:
         # 実際にはドロー時の山札切れチェックも必要
         return None
     
-def battle(attacker, enemy, stk_player, def_player):
-        if enemy.current_power < attacker.current_power:
-            if enemy in def_player.field:
-                def_player.field.remove(enemy)
-        elif attacker.current_power < enemy.current_power:
-            if attacker in stk_player.field:
-                stk_player.field.remove(attacker)
+def battle(attacker, enemy, attack_player, def_player):  # 追加機能４
+    """
+    バトルの処理をする関数
+    選択された両プレイヤーのクリーチャーをバトルさせる関数
+    引数 attacker = 攻撃側のカード, enemy = 攻撃された側のカード, attack_player = ターンプレイヤー, def_player = もう一人のプレイヤー
+    """
+    if not attacker or not enemy:  # 両変数にカードが格納されているか確認する
+        return
+
+    print("=== Battle Start ===")
+
+    if enemy.current_power < attacker.current_power:  # 防御側が負けの場合
+        for n in def_player.field:  # 防御側のフィールドリストにカードが存在するか調べる
+            if n is enemy:
+                def_player.field.remove(n)  # フィールドから負けたカードを削除する
+                def_player.graveyard.append(n)  # 墓地に負けたカードを追加する
+                break
         else:
-            if enemy in def_player.field:
-                def_player.field.remove(enemy)
-            if attacker in stk_player.field:
-                stk_player.field.remove(attacker)
-        return True
+            print("※ enemy が field に見つかりません（参照ずれ）")
+    elif attacker.current_power < enemy.current_power:  # 攻撃側が負けの場合
+        for n in attack_player.field:  # 攻撃側のフィールドリストにカードが存在するか調べる
+            if n is attacker:
+                attack_player.field.remove(n)  # フィールドから負けたカードを削除する
+                attack_player.graveyard.append(n)  # 墓地に負けたカードを追加する
+                break
+    else:  # 相打ちの場合
+        for n in def_player.field:  # 防御側のフィールドリストにカードが存在するか調べる
+            if n is enemy:
+                def_player.field.remove(n)  # フィールドから負けたカードを削除する
+                def_player.graveyard.append(n)  # 墓地に負けたカードを追加する
+                break
+        for n in attack_player.field:  # 攻撃側のフィールドリストにカードが存在するか調べる
+            if n is attacker:
+                attack_player.field.remove(n)  # フィールドから負けたカードを削除する
+                attack_player.graveyard.append(n)  # 墓地に負けたカードを追加する
+                break
+    print("=== Battle End ===")
+    return
+
+def attack_creature(num, attack_card, attack_player):  # 追加機能４
+    """
+    攻撃に関するクラス
+    攻撃選択したクリーチャーがフィールドに存在するか調べる。
+    引数 num = リストの順番, attack_card = 攻撃側のカード, attack_player = 攻撃側のプレイヤー
+    """
+    if attack_card is None:  # 攻撃するカードが選択されているか調べる
+        attack_card = attack_player.field[num]  # 選択したカードを対応するプレイヤーのフィールドリストから取り出し格納する
+        print(f"攻撃側選択: {attack_card.card.name}")
+    elif attack_card == attack_player.field[num]:  # 攻撃側をもう一度クリックすると選択解除
+        print(f"攻撃側解除: {attack_card.card.name}")
+        attack_card = None
+    return attack_card  # 攻撃するカードの変数を返す
+
+def chosen_creature(num, enemy_card, enemy_player):  # 追加機能４
+    """
+    攻撃先選択に関するクラス
+    攻撃先に選択したクリーチャーがフィールドに存在するか調べる。
+    引数 num = リストの順番, enemy_card = 選択されたカード, enemy_player = 攻撃を受ける側のプレイヤー
+    """
+    if enemy_player is not None:  # enemy_cardの中身が存在するか調べる
+        enemy_card = enemy_player.field[num]  # 選択したカードを対応するプレイヤーのフィールドリストから取り出す
+        if enemy_card.is_tapped:  # 選ばれたカードがタップされているか確認する
+            print(f"防御側選択: {enemy_card.card.name}")
+        else:  # タップされていなければ選択を無効にする
+            enemy_card = None
+    elif enemy_card == enemy_player.field[num]:  # 攻撃側をもう一度クリックすると選択解除
+        print(f"防御側解除: {enemy_card.card.name}")
+        enemy_card = None
+    return enemy_card  # 選ばれたカードを返す
 
 import pygame
 import sys
@@ -253,58 +309,38 @@ def run_game():
                         for i, card in enumerate(current_player.hand):
                             if pygame.Rect(200 + i * 110, 30, 300 + i * 110, 170).collidepoint(pos):
                                 selected_card = card
-                # --- 攻撃の実装 ---
-                if current_player == game.player1:
-                    for i, card in enumerate(current_player.field):
-                        rect = pygame.Rect(200 + i * 110, SCREEN_HEIGHT - 350, 100, 140)
-                        if rect.collidepoint(pos):
-                            if attack_card is None:
-                                attack_card = current_player.field[i]
-                                print(f"攻撃側選択: {attack_card.card.name}")
-                                # 攻撃側をもう一度クリック → 解除
-                            elif attack_card == current_player.field[i]:
-                                print(f"攻撃側解除: {attack_card.card.name}")
-                                attack_card = None
-                    for i, card in enumerate(opponent_player.field):  # 相手のカードを選択
-                        rect = pygame.Rect(200 + i * 110, 220, 100, 140)
-                        if rect.collidepoint(pos):
-                            if attack_card is not None:
-                                enemy_card = opponent_player.field[i]
-                                if enemy_card.is_tapped is True: 
-                                    print(f"防御側選択: {enemy_card.card.name}")
-                                else:
-                                    enemy_card = None
-                else:
+                # --- 攻撃の実装 --- 追加機能４
+                if current_player == game.player1:  # 攻撃するプレイヤーがプレイヤー1か2かを特定する
+                    for i, card in enumerate(current_player.field):  # 自分のカードを選択、フィールド関数に存在するカードを取り出す
+                        rect = pygame.Rect(200 + i * 110, SCREEN_HEIGHT - 350, 100, 140)  # フィールド上のカードの位置を格納する
+                        if rect.collidepoint(pos):  # blitされているカードが押されたかを確認
+                            attack_card = attack_creature(i, attack_card, current_player)  # 攻撃カード選択関数を呼び出す
+                    for i, card in enumerate(opponent_player.field):  # 相手のカードを選択、フィールド関数に存在するカードを取り出す
+                        rect = pygame.Rect(200 + i * 110, 220, 100, 140)  # フィールド上のカードの位置を格納する
+                        if rect.collidepoint(pos):  # blitされているカードが押されたかを確認
+                            enemy_card = chosen_creature(i, enemy_card, opponent_player)  # 攻撃先カード選択関数を呼び出す
+                else:  # 上と同様に攻撃プレイヤーが逆だった場合を調べる
                     for i, card in enumerate(current_player.field):
                         rect = pygame.Rect(200 + i * 110, 220, 100, 140)
                         if rect.collidepoint(pos):
-                            if attack_card is None:
-                                attack_card = current_player.field[i]
-                                print(f"攻撃側選択: {attack_card.card.name}")
-                            elif attack_card == current_player.field[i]:
-                                print(f"攻撃側解除: {attack_card.card.name}")
-                                attack_card = None
-                    for i, card in enumerate(opponent_player.field):  # 相手のカードを選択
+                            attack_card = attack_creature(i, attack_card, current_player)
+                    for i, card in enumerate(opponent_player.field):
                         rect = pygame.Rect(200 + i * 110, SCREEN_HEIGHT - 350, 100, 140)
                         if rect.collidepoint(pos):
-                            if attack_card is not None:
-                                enemy_card = opponent_player.field[i]
-                                if enemy_card.is_tapped is True: 
-                                    print(f"防御側選択: {enemy_card.card.name}")
-                                else:
-                                    enemy_card = None
-                attack_card_rect = pygame.Rect(30, SCREEN_HEIGHT // 2 - 75, 120, 50)
-                if attack_card_rect.collidepoint(pos):
-                        if attack_card is None:
+                            enemy_card = chosen_creature(i, enemy_card, opponent_player)
+                attack_card_rect = pygame.Rect(30, SCREEN_HEIGHT // 2 - 75, 120, 50)  # 攻撃ボタンの位置を調べる
+                if attack_card_rect.collidepoint(pos):  # 攻撃ボタンが押された場合、攻撃へ進む
+                        if attack_card is None:  # 攻撃カードが存在しない場合は無効にする
                             continue
-                        if not attack_card.is_tapped and attack_card.can_attack_this_turn:
-                            game.game_state = 'ATTACK_PHASE'
-                            attack_card.is_tapped = True
-                            if enemy_card is not None:
-                                battle(attack_card, enemy_card, current_player, opponent_player)
+                        
+                        if not attack_card.is_tapped and attack_card.can_attack_this_turn:  # 攻撃カードがタップしていないことと、攻撃可能であることを調べる
+                            game.game_state = 'ATTACK_PHASE'  # statusをアタックフェーズに切り替える
+                            attack_card.is_tapped = True  # 攻撃するカードをタップする
+                            if enemy_card is not None:  # 攻撃先カードが存在するか調べる
+                                battle(attack_card, enemy_card, current_player, opponent_player)  # battle関数を呼び出し、処理させる
                             else:
-                                opponent_player.life -= attack_card.current_attack
-                        attack_card = None
+                                opponent_player.life -= attack_card.current_attack  # 攻撃先のカードが選択されていない、もしくは攻撃先のカードが選択されていない場合は相手のライフを攻撃する
+                        attack_card = None  # 選んだ各カードの変数を初期化する
                         enemy_card = None
 
                 
