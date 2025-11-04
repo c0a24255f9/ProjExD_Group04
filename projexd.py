@@ -112,27 +112,29 @@ class Game:
         player.max_mana = min(player.max_mana + 1, 10) # 例として最大マナを10に設定
         player.mana = player.max_mana
         
-        # ドロー (先攻1ターン目以外)
-        if self.turn_count >= 1 or (self.turn_count == 1 and self.current_turn_player == self.player2):
-            if not player.draw_card():
-                # ドロー失敗で山札切れ負け
-                return self.check_win_condition() 
-
         # クリーチャーのフラグ更新
         for creature in player.field:
             creature.is_tapped = False
             creature.can_attack_this_turn = True 
-            
-        self.game_state = 'MAIN_PHASE'
+
+        # ドロー (先攻1ターン目以外)
+        if self.turn_count >= 1 or (self.turn_count == 1 and self.current_turn_player == self.player2):
+            if not player.draw_card():
+                # ドロー失敗で山札切れ負け
+                if player == self.player1:
+                    return "Player 2 Win (Deck Out)"
+                else:
+                    return "Player 1 Win (Deck Out)"
         
+        self.game_state = 'MAIN_PHASE'
         return self.check_win_condition()
 
     def check_win_condition(self):
         """勝利条件のチェック"""
         if self.player1.life <= 0: # 山札切れ敗北の機能追加が必要
-            return "Player 2 Win (Life 0)"
+            return "Player 2 Win"
         if self.player2.life <= 0:
-            return "Player 1 Win (Life 0)"
+            return "Player 1 Win"
         # 実際にはドロー時の山札切れチェックも必要
         return None
     
@@ -142,7 +144,7 @@ class StartScreen:
         self.font_big = pygame.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 60)
         self.font_small = pygame.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 30)
 
-    def run(self, result_message):
+    def run(self):
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -165,17 +167,21 @@ class ResultScreen:
         self.font_big = pygame.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 60)
         self.font_small = pygame.font.SysFont("hgp創英角ﾎﾟｯﾌﾟ体", 30)
 
-    def run(self):
+    def run(self, result_message):
         while True:
             for event in pygame.event.get():
-                if self == False:
-                    self.screen.fill((0,0,0))
-                    title = self.font_big.render("Game Eng", True, (255,255,255))
-                    msg = self.font_small.render("遊んでくれてありがとう", True, (255,255,255))
-                    self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, SCREEN_HEIGHT//2 - 50))
-                    self.screen.blit(msg, (SCREEN_WIDTH//2 - msg.get_width()//2, SCREEN_HEIGHT//2 + 50))                
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    return # クリックでリザルト画面を終了
+            self.screen.fill((0,0,0))
+            title = self.font_big.render("Game End", True, (255,255,255))
+            msg = self.font_small.render(result_message, True, (255,255,255))
+            self.screen.blit(title, (SCREEN_WIDTH//2 - title.get_width()//2, SCREEN_HEIGHT//2 - 50))
+            self.screen.blit(msg, (SCREEN_WIDTH//2 - msg.get_width()//2, SCREEN_HEIGHT//2 + 50))                
                     
-                    pygame.display.flip()
+            pygame.display.flip()
 
 import pygame
 import sys
@@ -249,7 +255,8 @@ def run_game():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            
+                result = "Quit" # 終了理由を設定
+
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = event.pos
                 
@@ -259,10 +266,7 @@ def run_game():
                     result = game.next_turn()
                     game.game_state = 'MAIN_PHASE'
                     if result:
-                        # print(f"Game Over: {result}")
-                        # running = False
-                        re = ResultScreen(screen)
-                        re.run(result)
+                        running = False
 
                 # --- カード使用ボタンの判定 ---
                 if game.game_state == 'MAIN_PHASE':
@@ -274,6 +278,7 @@ def run_game():
                                 current_player.field.append(Creature(selected_card))
                                 current_player.hand.remove(selected_card)
                                 selected_card = None
+
                     # --- カードを選ぶ判定 ---
                     if current_player == game.player1:
                         for i, card in enumerate(current_player.hand):
@@ -346,11 +351,18 @@ def run_game():
         screen.blit(end_text, (end_turn_rect.x + 10, end_turn_rect.y + 15))
 
         pygame.display.flip()
-        if game.check_win_condition() != None:
-            print(f"Game Over: {result}")
+        
+        # ループ内での勝利条件チェック (攻撃後のライフ減少に対応)
+        if not result:
+            result = game.check_win_condition()
+            
+        if result:
             running = False
-            re = ResultScreen(screen)
-            re.run(running)
+
+    # メインループ終了後、リザルト画面を表示
+    if result:
+        re = ResultScreen(screen)
+        re.run(result)
 
     
     pygame.quit()
